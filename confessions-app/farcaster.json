@@ -1,0 +1,15 @@
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjMxNTMsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhlMDJFZURBMTcxOTc5Mzg4ZDc2ZjM0NDc2NzgyNTk1ODY0ODVBMTEzIn0",
+    "payload": "eyJkb21haW4iOiJkYWludHktbWVsYmEtNTliM2NlLm5ldGxpZnkuYXBwIn0",
+    "signature": "dfZAk4mOemvscelkiEnfax0cxG9MuGXtQjTdS/WkYwV+oDas+HtJsyWJosWsTpHgjRrnnOOYBO91efGKOCzbrBw="
+  },
+  "frame": {
+    "version": "1",
+    "name": "Confessional",
+    "iconUrl": "https://YOUR-VERCEL-URL/icon.png",
+    "homeUrl": "https://YOUR-VERCEL-URL",
+    "splashImageUrl": "https://YOUR-VERCEL-URL/splash.png",
+    "splashBackgroundColor": "#2D1B1B"
+  }
+}

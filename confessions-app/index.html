@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confessions</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>CONFESSIONAL</h1>
+            <p class="subtitle">"Forgive me, for I have sinned"</p>
+        </header>
+
+        <div class="stats-bar">
+            <div class="stat">
+                <span class="stat-icon">🕯</span>
+                <span class="stat-label">Grace</span>
+                <span class="stat-value" id="grace-count">100</span>
+            </div>
+            <div class="stat">
+                <span class="stat-icon">✨</span>
+                <span class="stat-label">Faith</span>
+                <span class="stat-value" id="faith-count">0</span>
+            </div>
+            <div class="stat">
+                <span class="stat-icon">👁</span>
+                <span class="stat-label" id="user-title">Seeker</span>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="judge">Hear Confessions</button>
+            <button class="tab" data-tab="confess">Confess</button>
+            <button class="tab" data-tab="leaderboard">The Faithful</button>
+        </div>
+
+        <div class="tab-content active" id="judge-tab">
+            <div class="judge-section">
+                <div class="deed-card" id="deed-card">
+                    <div class="deed-header">
+                        <span class="deed-type" id="deed-type">Confession</span>
+                        <span class="deed-id" id="current-deed-id">#XXXXX</span>
+                    </div>
+                    <p class="deed-text" id="deed-text">Loading...</p>
+                    <div class="deed-stats">
+                        <span class="deed-stat">🙏 <span id="deed-bless-count">0</span></span>
+                        <span class="deed-stat">👎 <span id="deed-block-count">0</span></span>
+                    </div>
+                    
+                    <!-- Comments Section -->
+                    <div class="comments-section" id="comments-section">
+                        <div class="comments-header">Judgments (<span id="comment-count">0</span>)</div>
+                        <div class="comments-list" id="comments-list">
+                            <!-- Comments will appear here -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Add Comment Box -->
+                <div class="comment-box">
+                    <textarea 
+                        id="comment-input" 
+                        placeholder="Speak your judgment... (costs $0.20 USDC)"
+                        maxlength="200"
+                    ></textarea>
+                    <div class="comment-char-count">
+                        <span id="comment-char-counter">0</span>/200
+                        <span style="margin-left: 10px; color: #8B7355;">$0.20 USDC per judgment</span>
+                    </div>
+                </div>
+                
+                <div class="judge-actions">
+                    <button class="judge-btn block-btn" id="block-btn">
+                        <span class="btn-icon">⚖</span>
+                        <span class="btn-text">Condemn</span>
+                        <span class="btn-cost">+15 Grace</span>
+                    </button>
+                    <button class="judge-btn bless-btn" id="bless-btn">
+                        <span class="btn-icon">🕊</span>
+                        <span class="btn-text">Absolve</span>
+                        <span class="btn-cost">-5 Grace</span>
+                    </button>
+                </div>
+                <button class="skip-btn" id="skip-btn">Pass Judgment Later</button>
+            </div>
+        </div>
+
+        <div class="tab-content" id="confess-tab">
+            <div class="write-section">
+                <textarea 
+                    id="confession-input" 
+                    placeholder="Speak your confession unto the faithful..."
+                    maxlength="500"
+                ></textarea>
+                <div class="char-count">
+                    <span id="char-counter">0</span>/500
+                </div>
+                <div class="confession-cost">
+                    <span>Your penance: $0.10 USDC (Base Chain)</span>
+                    <span style="display: block; font-size: 0.8em; margin-top: 5px; opacity: 0.8;">Paid through the x402 protocol</span>
+                </div>
+                <button id="submit-btn" class="submit-btn">
+                    Confess Your Sins
+                </button>
+            </div>
+        </div>
+
+        <div class="tab-content" id="leaderboard-tab">
+            <div class="leaderboard-section">
+                <div class="leaderboard-tabs">
+                    <button class="lb-tab active" data-lb="faithful">The Righteous</button>
+                    <button class="lb-tab" data-lb="merciful">The Merciful</button>
+                </div>
+                <div class="leaderboard-list" id="leaderboard-list">
+                    <!-- Leaderboard entries -->
+                </div>
+            </div>
+        </div>
+
+        <div class="loading-overlay" id="loading-overlay">
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import wallet dependencies
+        let getWalletClient, configWagmi;
+        
+        // Dynamically import dependencies
+        async function loadDependencies() {
+            // No dependencies needed for direct wallet transactions
+        }
+        
+        // Game State
+        let deeds = [];
+        let currentDeedIndex = 0;
+        let grace = 100;
+        let faith = 0;
+        let userStats = {
+            blessed: 0,
+            blocked: 0,
+            submitted: 0
+        };
+        let walletConnected = false;
+        let userAddress = null;
+        let farcasterUsername = null;
+        
+        const STORAGE_KEY = 'bless_or_block_deeds';
+        const STATS_KEY = 'bless_or_block_stats';
+        let sdk = null;
+
+        // DOM elements
+        const confessionInput = document.getElementById('confession-input');
+        const charCounter = document.getElementById('char-counter');
+        const submitBtn = document.getElementById('submit-btn');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        // Judge tab elements
+        const deedText = document.getElementById('deed-text');
+        const deedId = document.getElementById('current-deed-id');
+        const deedType = document.getElementById('deed-type');
+        const deedBlessCount = document.getElementById('deed-bless-count');
+        const deedBlockCount = document.getElementById('deed-block-count');
+        const blessBtn = document.getElementById('bless-btn');
+        const blockBtn = document.getElementById('block-btn');
+        const skipBtn = document.getElementById('skip-btn');
+        const commentInput = document.getElementById('comment-input');
+        const commentCharCounter = document.getElementById('comment-char-counter');
+        const commentsList = document.getElementById('comments-list');
+        const commentCount = document.getElementById('comment-count');
+        
+        // Stats elements
+        const graceCount = document.getElementById('grace-count');
+        const faithCount = document.getElementById('faith-count');
+        const userTitle = document.getElementById('user-title');
+        const leaderboardList = document.getElementById('leaderboard-list');
+
+        // Initialize app
+        async function initApp() {
+            try {
+                showLoading();
+                await loadDependencies();
+                loadData();
+                updateStats();
+                
+                try {
+                    const module = await import('https://esm.sh/@farcaster/miniapp-sdk');
+                    sdk = module.sdk;
+                    if (sdk && sdk.actions && sdk.actions.ready) {
+                        await sdk.actions.ready();
+                    }
+                    
+                    // Get wallet context and username from Farcaster
+                    if (sdk && sdk.wallet) {
+                        try {
+                            const wallet = await sdk.wallet.ethProvider;
+                            if (wallet) {
+                                walletConnected = true;
+                                const accounts = await wallet.request({ method: 'eth_accounts' });
+                                if (accounts && accounts.length > 0) {
+                                    userAddress = accounts[0];
+                                }
+                            }
+                        } catch (error) {
+                            console.log('Wallet not available:', error);
+                        }
+                    }
+                    
+                    // Get Farcaster username
+                    if (sdk && sdk.context) {
+                        try {
+                            const context = await sdk.context;
+                            if (context && context.user && context.user.username) {
+                                farcasterUsername = context.user.username.toLowerCase();
+                                console.log('Farcaster username:', farcasterUsername);
+                            }
+                        } catch (error) {
+                            console.log('Could not get username:', error);
+                        }
+                    }
+                } catch (error) {
+                    console.log('Running in standalone mode');
+                }
+                
+                hideLoading();
+                loadNextDeed();
+            } catch (error) {
+                console.error('Failed to initialize app:', error);
+                hideLoading();
+            }
+        }
+
+        // Tab switching
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.getAttribute('data-tab');
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                tabContents.forEach(content => content.classList.remove('active'));
+                document.getElementById(`${tabName}-tab`).classList.add('active');
+                
+                if (tabName === 'judge') {
+                    loadNextDeed();
+                } else if (tabName === 'leaderboard') {
+                    renderLeaderboard();
+                }
+            });
+        });
+
+        // Character counter for comments
+        commentInput.addEventListener('input', () => {
+            const length = commentInput.value.length;
+            commentCharCounter.textContent = length;
+            commentCharCounter.style.color = length > 180 ? '#ff4444' : '#7a7a8a';
+        });
+
+        // Character counter
+        confessionInput.addEventListener('input', () => {
+            const length = confessionInput.value.length;
+            charCounter.textContent = length;
+            charCounter.style.color = length > 450 ? '#ff4444' : '#999';
+        });
+
+        // Submit confession with payment
+        submitBtn.addEventListener('click', async () => {
+            const text = confessionInput.value.trim();
+            
+            if (!text) {
+                showMessage('Please write something before submitting!', 'error');
+                return;
+            }
+            
+            if (text.length < 10) {
+                showMessage('Too short. Please write at least 10 characters.', 'error');
+                return;
+            }
+            
+            // Check if wallet is connected (Farcaster wallet is auto-connected)
+            if (!walletConnected && sdk && sdk.wallet) {
+                try {
+                    const wallet = await sdk.wallet.ethProvider;
+                    if (wallet) {
+                        const accounts = await wallet.request({ method: 'eth_accounts' });
+                        if (accounts && accounts.length > 0) {
+                            walletConnected = true;
+                            userAddress = accounts[0];
+                        } else {
+                            showMessage('Please connect your wallet in Farcaster settings', 'error');
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Wallet error:', error);
+                    showMessage('Wallet connection required. Please check Farcaster wallet settings.', 'error');
+                    return;
+                }
+            }
+            
+            try {
+                showLoading();
+                
+                // Process payment using direct wallet transaction
+                let paymentSuccessful = false;
+                
+                if (sdk && sdk.wallet) {
+                    try {
+                        // Get wallet provider from Farcaster SDK
+                        const provider = await sdk.wallet.ethProvider;
+                        
+                        if (!provider) {
+                            throw new Error('Wallet provider not available');
+                        }
+                        
+                        // Verify we're on Base network (chainId 8453)
+                        const chainId = await provider.request({ method: 'eth_chainId' });
+                        const baseChainId = '0x2105'; // 8453 in hex
+                        
+                        if (chainId !== baseChainId) {
+                            showMessage('Please switch to Base network in your wallet', 'error');
+                            hideLoading();
+                            return;
+                        }
+                        
+                        // USDC on Base: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+                        const usdcAddress = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+                        const recipientAddress = '0x4d68BF377995c478bb8D3bB1eDE71502c7E55E94';
+                        const paymentAmount = '100000'; // 0.10 USDC (6 decimals)
+                        
+                        // Encode transfer data
+                        const transferData = encodeTransfer(recipientAddress, paymentAmount);
+                        
+                        // Request payment transaction
+                        const tx = await provider.request({
+                            method: 'eth_sendTransaction',
+                            params: [{
+                                from: userAddress,
+                                to: usdcAddress,
+                                value: '0x0',
+                                data: transferData
+                            }]
+                        });
+                        
+                        if (tx) {
+                            paymentSuccessful = true;
+                            await showMessage('✓ Payment successful! 0.10 USDC paid', 'success');
+                        }
+                    } catch (paymentError) {
+                        console.error('Payment failed:', paymentError);
+                        hideLoading();
+                        
+                        if (paymentError.message && paymentError.message.includes('User denied')) {
+                            showMessage('Payment cancelled by user', 'error');
+                        } else {
+                            showMessage('Payment failed: ' + (paymentError.message || 'Unknown error'), 'error');
+                        }
+                        return;
+                    }
+                } else {
+                    // Fallback: Use Grace points if payment not available
+                    if (grace < 20) {
+                        showMessage('Not enough Grace! Bless more deeds to earn Grace.', 'error');
+                        hideLoading();
+                        return;
+                    }
+                    grace -= 20;
+                    paymentSuccessful = true;
+                }
+                
+                if (paymentSuccessful) {
+                    const deed = {
+                        id: generateId(),
+                        text: text,
+                        timestamp: Date.now(),
+                        blessCount: 0,
+                        blockCount: 0,
+                        type: 'Confession',
+                        paid: walletConnected
+                    };
+                    
+                    deeds.unshift(deed);
+                    userStats.submitted++;
+                    saveData();
+                    updateStats();
+                    
+                    confessionInput.value = '';
+                    charCounter.textContent = '0';
+                    
+                    await showMessage('✓ Deed submitted for judgment!', 'success');
+                    
+                    tabs[0].click();
+                }
+                
+                hideLoading();
+            } catch (error) {
+                console.error('Failed to submit:', error);
+                showMessage('Failed to submit. Please try again.', 'error');
+                hideLoading();
+            }
+        });
+        
+        // Encode USDC transfer function
+        function encodeTransfer(recipientAddress, amount) {
+            // ERC20 transfer function signature: transfer(address,uint256)
+            const functionSignature = '0xa9059cbb';
+            // Remove 0x prefix if present and pad to 64 chars
+            const recipient = recipientAddress.replace('0x', '').padStart(64, '0');
+            const amountHex = parseInt(amount).toString(16).padStart(64, '0');
+            return functionSignature + recipient + amountHex;
+        }
+
+        // Bless button with comment
+        blessBtn.addEventListener('click', async () => {
+            if (currentDeedIndex >= deeds.length) return;
+            
+            const deed = deeds[currentDeedIndex];
+            const comment = commentInput.value.trim();
+            
+            // If comment exists, require payment (unless user is "jesus")
+            if (comment) {
+                const isJesus = farcasterUsername === 'jesus';
+                
+                if (!isJesus) {
+                    // Non-jesus users must pay
+                    if (!walletConnected && sdk && sdk.wallet) {
+                        try {
+                            const wallet = await sdk.wallet.ethProvider;
+                            if (wallet) {
+                                const accounts = await wallet.request({ method: 'eth_accounts' });
+                                if (accounts && accounts.length > 0) {
+                                    walletConnected = true;
+                                    userAddress = accounts[0];
+                                } else {
+                                    showMessage('Wallet required for comments. Please connect in Farcaster.', 'error');
+                                    return;
+                                }
+                            }
+                        } catch (error) {
+                            showMessage('Wallet connection required for comments', 'error');
+                            return;
+                        }
+                    }
+                    
+                    // Process payment for comment using direct wallet transaction
+                    try {
+                        showLoading();
+                        
+                        const provider = await sdk.wallet.ethProvider;
+                        if (!provider) {
+                            throw new Error('Wallet provider not available');
+                        }
+                        
+                        const chainId = await provider.request({ method: 'eth_chainId' });
+                        const baseChainId = '0x2105';
+                        
+                        if (chainId !== baseChainId) {
+                            showMessage('Please switch to Base network', 'error');
+                            hideLoading();
+                            return;
+                        }
+                        
+                        const usdcAddress = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+                        const recipientAddress = '0x4d68BF377995c478bb8D3bB1eDE71502c7E55E94';
+                        const commentPayment = '200000'; // 0.20 USDC
+                        
+                        const transferData = encodeTransfer(recipientAddress, commentPayment);
+                        
+                        const tx = await provider.request({
+                            method: 'eth_sendTransaction',
+                            params: [{
+                                from: userAddress,
+                                to: usdcAddress,
+                                value: '0x0',
+                                data: transferData
+                            }]
+                        });
+                        
+                        if (!tx) {
+                            hideLoading();
+                            showMessage('Payment cancelled', 'error');
+                            return;
+                        }
+                        
+                        hideLoading();
+                    } catch (paymentError) {
+                        console.error('Payment failed:', paymentError);
+                        hideLoading();
+                        
+                        if (paymentError.message && paymentError.message.includes('User denied')) {
+                            showMessage('Payment cancelled. Comment not posted.', 'error');
+                        } else {
+                            showMessage('Payment failed: ' + (paymentError.message || 'Unknown error'), 'error');
+                        }
+                        return;
+                    }
+                } else {
+                    // Jesus gets free comments
+                    console.log('Free comment for jesus on bless');
+                }
+            }
+            
+            deed.blessCount++;
+            grace -= 5;  // Lose grace when absolving
+            faith += 2;
+            userStats.blessed++;
+            
+            // Add comment if provided
+            if (comment) {
+                if (!deed.comments) deed.comments = [];
+                deed.comments.push({
+                    text: comment,
+                    judgment: 'blessed',
+                    timestamp: Date.now()
+                });
+            }
+            
+            saveData();
+            updateStats();
+            
+            const message = comment 
+                ? '🕊 Absolved with comment! -5 Grace, +2 Faith (0.20 USDC paid)' 
+                : '🕊 Absolved! -5 Grace, +2 Faith';
+            await showMessage(message, 'success');
+            
+            commentInput.value = '';
+            commentCharCounter.textContent = '0';
+            loadNextDeed();
+        });
+
+        // Block button with comment
+        blockBtn.addEventListener('click', async () => {
+            if (currentDeedIndex >= deeds.length) return;
+            
+            const deed = deeds[currentDeedIndex];
+            const comment = commentInput.value.trim();
+            
+            // If comment exists, require payment (unless user is "jesus")
+            if (comment) {
+                const isJesus = farcasterUsername === 'jesus';
+                
+                if (!isJesus) {
+                    // Non-jesus users must pay
+                    if (!walletConnected && sdk && sdk.wallet) {
+                        try {
+                            const wallet = await sdk.wallet.ethProvider;
+                            if (wallet) {
+                                const accounts = await wallet.request({ method: 'eth_accounts' });
+                                if (accounts && accounts.length > 0) {
+                                    walletConnected = true;
+                                    userAddress = accounts[0];
+                                } else {
+                                    showMessage('Wallet required for comments. Please connect in Farcaster.', 'error');
+                                    return;
+                                }
+                            }
+                        } catch (error) {
+                            showMessage('Wallet connection required for comments', 'error');
+                            return;
+                        }
+                    }
+                    
+                    // Process payment for comment using direct wallet transaction
+                    try {
+                        showLoading();
+                        
+                        const provider = await sdk.wallet.ethProvider;
+                        if (!provider) {
+                            throw new Error('Wallet provider not available');
+                        }
+                        
+                        const chainId = await provider.request({ method: 'eth_chainId' });
+                        const baseChainId = '0x2105';
+                        
+                        if (chainId !== baseChainId) {
+                            showMessage('Please switch to Base network', 'error');
+                            hideLoading();
+                            return;
+                        }
+                        
+                        const usdcAddress = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+                        const recipientAddress = '0x4d68BF377995c478bb8D3bB1eDE71502c7E55E94';
+                        const commentPayment = '200000'; // 0.20 USDC
+                        
+                        const transferData = encodeTransfer(recipientAddress, commentPayment);
+                        
+                        const tx = await provider.request({
+                            method: 'eth_sendTransaction',
+                            params: [{
+                                from: userAddress,
+                                to: usdcAddress,
+                                value: '0x0',
+                                data: transferData
+                            }]
+                        });
+                        
+                        if (!tx) {
+                            hideLoading();
+                            showMessage('Payment cancelled', 'error');
+                            return;
+                        }
+                        
+                        hideLoading();
+                    } catch (paymentError) {
+                        console.error('Payment failed:', paymentError);
+                        hideLoading();
+                        
+                        if (paymentError.message && paymentError.message.includes('User denied')) {
+                            showMessage('Payment cancelled. Comment not posted.', 'error');
+                        } else {
+                            showMessage('Payment failed: ' + (paymentError.message || 'Unknown error'), 'error');
+                        }
+                        return;
+                    }
+                } else {
+                    // Jesus gets free comments
+                    console.log('Free comment for jesus on block');
+                }
+            }
+            
+            deed.blockCount++;
+            grace += 15;  // Gain more grace when condemning
+            if (comment) {
+                grace += 5;  // Extra bonus for judging with comment
+            }
+            userStats.blocked++;
+            
+            // Add comment if provided
+            if (comment) {
+                if (!deed.comments) deed.comments = [];
+                deed.comments.push({
+                    text: comment,
+                    judgment: 'blocked',
+                    timestamp: Date.now()
+                });
+            }
+            
+            saveData();
+            updateStats();
+            
+            const message = comment 
+                ? '⚖ Condemned with judgment! +20 Grace, +1 Faith (0.20 USDC paid)' 
+                : '⚖ Condemned! +15 Grace, +1 Faith';
+            await showMessage(message, 'warning');
+            
+            commentInput.value = '';
+            commentCharCounter.textContent = '0';
+            loadNextDeed();
+        });
+
+        // Skip button
+        skipBtn.addEventListener('click', () => {
+            commentInput.value = '';
+            commentCharCounter.textContent = '0';
+            loadNextDeed();
+        });
+
+        // Load next deed
+        function loadNextDeed() {
+            if (deeds.length === 0) {
+                deedText.textContent = 'No deeds to judge yet. Submit a confession!';
+                deedId.textContent = '#NONE';
+                deedType.textContent = 'Empty';
+                deedBlessCount.textContent = '0';
+                deedBlockCount.textContent = '0';
+                commentsList.innerHTML = '';
+                commentCount.textContent = '0';
+                blessBtn.disabled = true;
+                blockBtn.disabled = true;
+                return;
+            }
+            
+            currentDeedIndex = currentDeedIndex % deeds.length;
+            const deed = deeds[currentDeedIndex];
+            
+            deedText.textContent = deed.text;
+            deedId.textContent = '#' + deed.id;
+            deedType.textContent = deed.type || 'Confession';
+            deedBlessCount.textContent = deed.blessCount || 0;
+            deedBlockCount.textContent = deed.blockCount || 0;
+            
+            // Render comments
+            renderComments(deed.comments || []);
+            
+            blessBtn.disabled = false;
+            blockBtn.disabled = false;
+            
+            currentDeedIndex++;
+        }
+        
+        // Render comments for current deed
+        function renderComments(comments) {
+            commentCount.textContent = comments.length;
+            
+            if (comments.length === 0) {
+                commentsList.innerHTML = '<div style="text-align: center; color: #7a7a8a; padding: 10px; font-size: 0.85em;">No judgments yet</div>';
+                return;
+            }
+            
+            commentsList.innerHTML = comments.map(comment => `
+                <div class="comment-item ${comment.judgment}">
+                    <div class="comment-header">
+                        <span class="comment-judgment ${comment.judgment}">
+                            ${comment.judgment === 'blessed' ? '🙏 Blessed' : '👎 Blocked'}
+                        </span>
+                        <span class="comment-time">${formatTime(comment.timestamp)}</span>
+                    </div>
+                    <div class="comment-text">${escapeHtml(comment.text)}</div>
+                </div>
+            `).join('');
+        }
+        
+        // Escape HTML helper
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Update stats display
+        function updateStats() {
+            graceCount.textContent = grace;
+            faithCount.textContent = faith;
+            
+            const title = getTitleByFaith(faith);
+            userTitle.textContent = title;
+        }
+
+        // Get title based on faith
+        function getTitleByFaith(faith) {
+            if (faith >= 1000) return '👑 Saint';
+            if (faith >= 500) return '✨ Prophet';
+            if (faith >= 250) return '🕊 Priest';
+            if (faith >= 100) return '🙏 Believer';
+            if (faith >= 50) return '🌱 Novice';
+            if (faith < 0) return '👿 Heretic';
+            return '🔍 Seeker';
+        }
+
+        // Leaderboard tabs
+        document.querySelectorAll('.lb-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.lb-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                renderLeaderboard(tab.getAttribute('data-lb'));
+            });
+        });
+
+        // Render leaderboard
+        function renderLeaderboard(type = 'faithful') {
+            // Create anonymous leaderboard with simple numbering
+            const entries = [
+                { rank: 1, name: '#1', title: '👑 Saint', score: 1247 },
+                { rank: 2, name: '#2', title: '✨ Prophet', score: 892 },
+                { rank: 3, name: '#3', title: '🕊 Priest', score: 654 },
+                { rank: 4, name: '#4 (You)', title: getTitleByFaith(faith), score: faith, isYou: true },
+                { rank: 5, name: '#5', title: '🙏 Believer', score: 234 },
+                { rank: 6, name: '#6', title: '🌱 Novice', score: 156 },
+                { rank: 7, name: '#7', title: '🔍 Seeker', score: 89 },
+            ];
+            
+            entries.sort((a, b) => b.score - a.score);
+            
+            leaderboardList.innerHTML = entries.map((entry, index) => {
+                const actualRank = index + 1;
+                const rankClass = actualRank === 1 ? 'first' : actualRank === 2 ? 'second' : actualRank === 3 ? 'third' : '';
+                const youClass = entry.isYou ? 'style="background: rgba(212, 175, 55, 0.1); border-color: rgba(212, 175, 55, 0.4);"' : '';
+                return `
+                    <div class="lb-entry" ${youClass}>
+                        <div class="lb-rank ${rankClass}">#${actualRank}</div>
+                        <div class="lb-info">
+                            <div class="lb-name">${entry.name}${entry.isYou ? ' 🎯' : ''}</div>
+                            <div class="lb-title">${entry.title}</div>
+                        </div>
+                        <div class="lb-score">${entry.score}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Data persistence
+        function loadData() {
+            try {
+                const storedDeeds = localStorage.getItem(STORAGE_KEY);
+                const storedStats = localStorage.getItem(STATS_KEY);
+                
+                if (storedDeeds) {
+                    deeds = JSON.parse(storedDeeds);
+                }
+                
+                if (storedStats) {
+                    const stats = JSON.parse(storedStats);
+                    grace = stats.grace || 100;
+                    faith = stats.faith || 0;
+                    userStats = stats.userStats || { blessed: 0, blocked: 0, submitted: 0 };
+                }
+            } catch (error) {
+                console.error('Failed to load data:', error);
+            }
+        }
+
+        function saveData() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(deeds));
+                localStorage.setItem(STATS_KEY, JSON.stringify({
+                    grace,
+                    faith,
+                    userStats
+                }));
+            } catch (error) {
+                console.error('Failed to save data:', error);
+            }
+        }
+
+        // Utility functions
+        function generateId() {
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        function showMessage(text, type = 'success') {
+            return new Promise(resolve => {
+                const colors = {
+                    success: '#4caf50',
+                    error: '#dc3545',
+                    warning: '#ff9800'
+                };
+                
+                const message = document.createElement('div');
+                message.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: ${colors[type]};
+                    color: white;
+                    padding: 15px 30px;
+                    border-radius: 10px;
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+                    z-index: 2000;
+                    animation: slideDown 0.3s ease;
+                `;
+                message.textContent = text;
+                
+                document.body.appendChild(message);
+                
+                setTimeout(() => {
+                    message.style.animation = 'slideUp 0.3s ease';
+                    setTimeout(() => {
+                        document.body.removeChild(message);
+                        resolve();
+                    }, 300);
+                }, 2000);
+            });
+        }
+
+        function showLoading() {
+            loadingOverlay.classList.add('active');
+        }
+
+        function hideLoading() {
+            loadingOverlay.classList.remove('active');
+        }
+
+        // Add CSS animations
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideDown {
+                from {
+                    opacity: 0;
+                    transform: translateX(-50%) translateY(-20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateX(-50%) translateY(0);
+                }
+            }
+            
+            @keyframes slideUp {
+                from {
+                    opacity: 1;
+                    transform: translateX(-50%) translateY(0);
+                }
+                to {
+                    opacity: 0;
+                    transform: translateX(-50%) translateY(-20px);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Initialize app
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initApp);
+        } else {
+            initApp();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "Confessional",
+  "version": "1.0.0",
+  "description": "A sacred space for anonymous confession and moral judgment. Powered by x402 payments on Base.",
+  "splashBackgroundColor": "#2D1B1B",
+  "splashImageUrl": "https://via.placeholder.com/512x512/2D1B1B/C9A050?text=✝️",
+  "homeUrl": "/",
+  "iconUrl": "https://via.placeholder.com/192x192/2D1B1B/C9A050?text=✝️"
+}
